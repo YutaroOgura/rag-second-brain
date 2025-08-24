@@ -7,6 +7,14 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { 
+  ListToolsRequestSchema, 
+  CallToolRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema
+} from "@modelcontextprotocol/sdk/types.js";
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
@@ -25,12 +33,13 @@ const server = new Server({
 }, {
   capabilities: {
     tools: {},
-    resources: {}
+    resources: {},
+    prompts: {}
   }
 });
 
 // ツール一覧の定義
-server.setRequestHandler("tools/list", async () => ({
+server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "rag_search",
@@ -127,7 +136,7 @@ server.setRequestHandler("tools/list", async () => ({
 }));
 
 // ツールの実行
-server.setRequestHandler("tools/call", async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   
   try {
@@ -209,7 +218,7 @@ server.setRequestHandler("tools/call", async (request) => {
 });
 
 // リソース一覧の定義
-server.setRequestHandler("resources/list", async () => ({
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({
   resources: [
     {
       uri: "rag://stats",
@@ -227,7 +236,7 @@ server.setRequestHandler("resources/list", async () => ({
 }));
 
 // リソースの読み取り
-server.setRequestHandler("resources/read", async (request) => {
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const { uri } = request.params;
   
   try {
@@ -273,7 +282,7 @@ server.setRequestHandler("resources/read", async (request) => {
 });
 
 // プロンプト一覧
-server.setRequestHandler("prompts/list", async () => ({
+server.setRequestHandler(ListPromptsRequestSchema, async () => ({
   prompts: [
     {
       name: "search_docs",
@@ -290,7 +299,7 @@ server.setRequestHandler("prompts/list", async () => ({
 }));
 
 // プロンプトの取得
-server.setRequestHandler("prompts/get", async (request) => {
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   
   if (name === "search_docs") {
