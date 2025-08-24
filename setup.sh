@@ -44,10 +44,32 @@ check_requirements() {
     PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
     log_info "Python version: $PYTHON_VERSION"
     
-    # pip チェック
-    if ! python3 -m pip --version &> /dev/null; then
-        log_error "pip が見つかりません"
-        exit 1
+    # pip チェック（Python 3.12対応）
+    if python3 -m pip --version &> /dev/null; then
+        log_info "pip version: $(python3 -m pip --version)"
+    else
+        log_warning "pip が見つかりません。インストールします..."
+        # pipのインストール試行
+        if command -v apt-get &> /dev/null; then
+            log_info "apt-getでpython3-pipをインストール中..."
+            sudo apt-get update && sudo apt-get install -y python3-pip python3-venv
+        elif command -v brew &> /dev/null; then
+            log_info "brewでpipをインストール中..."
+            python3 -m ensurepip
+        else
+            log_info "get-pip.pyでpipをインストール中..."
+            curl https://bootstrap.pypa.io/get-pip.py | python3
+        fi
+        
+        # 再チェック
+        if ! python3 -m pip --version &> /dev/null; then
+            log_error "pipのインストールに失敗しました"
+            log_error "手動でインストールしてください："
+            log_error "  Ubuntu/Debian: sudo apt-get install python3-pip python3-venv"
+            log_error "  macOS: python3 -m ensurepip"
+            log_error "  その他: curl https://bootstrap.pypa.io/get-pip.py | python3"
+            exit 1
+        fi
     fi
     
     # Git チェック（オプショナル）
@@ -89,7 +111,7 @@ install_dependencies() {
     source "$RAG_HOME/venv/bin/activate"
     
     # pipのアップグレード
-    pip install --upgrade pip
+    python3 -m pip install --upgrade pip
     
     # 必須パッケージのインストール
     log_info "必須パッケージをインストール中..."
