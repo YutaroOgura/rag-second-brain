@@ -1,0 +1,88 @@
+# RAG Second Brain Configuration File
+
+# General settings
+project:
+  default_project: "default"
+  auto_detect: true  # Automatically detect project from git
+
+# Database settings
+database:
+  type: "chromadb"
+  path: "~/.rag/chroma"  # Will be expanded to user home
+  collection_name: "documents"
+
+# Embedding settings
+embedding:
+  model: "sentence-transformers/multilingual-e5-base"
+  batch_size: 32
+  device: "cpu"  # or "cuda" if GPU available
+
+# Chunking settings
+chunking:
+  strategy: "fixed"  # fixed, semantic, or markdown
+  chunk_size: 1000
+  chunk_overlap: 200
+  separator: "\n\n"
+  
+# Search settings
+search:
+  default_top_k: 5
+  hybrid_alpha: 0.5  # Balance between vector (0.0) and keyword (1.0) search
+  include_metadata: true
+  include_scores: true
+
+# CLI settings
+cli:
+  output_format: "text"  # text, json, or table
+  color_output: true
+  verbose: false
+
+# MCP Server settings
+mcp:
+  auto_index: true
+  context_window: 3
+  suggest_on_save: true
+
+# Logging settings
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "~/.rag/logs/rag.log"
+  max_file_size: "10MB"
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Cache settings
+cache:
+  enabled: true
+  ttl_hours: 24
+  max_size_mb: 500
+  path: "~/.rag/cache"
+
+# External sources
+external_sources:
+  jira:
+    enabled: false
+    ttl_hours: 6
+  confluence:
+    enabled: false
+    ttl_hours: 12
+  web:
+    enabled: true
+    ttl_hours: 24
+
+# File handling
+file_handling:
+  supported_extensions:
+    - ".md"
+    - ".markdown"
+    - ".html"
+    - ".htm"
+    - ".txt"
+  max_file_size_mb: 10
+  encoding: "utf-8"
+  ignore_patterns:
+    - "*.min.js"
+    - "*.min.css"
+    - "node_modules/"
+    - "__pycache__/"
+    - ".git/"
