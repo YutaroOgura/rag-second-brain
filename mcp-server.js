@@ -149,7 +149,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (project_id) cmd += ` --project ${project_id}`;
         cmd += ` --type ${search_type}`;
         cmd += ` --top-k ${top_k}`;
-        cmd += ` --output-format json`;
+        cmd += ` --format json`;
         break;
       }
       
@@ -164,12 +164,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { project_id } = args;
         cmd = `${RAG_CMD} stats`;
         if (project_id) cmd += ` --project ${project_id}`;
-        cmd += ` --output-format json`;
+        // JSON output is default for stats
         break;
       }
       
       case "rag_projects": {
-        cmd = `${RAG_CMD} projects --output-format json`;
+        cmd = `${RAG_CMD} projects`;  // JSON output is default
         break;
       }
       
@@ -244,10 +244,10 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     
     switch (uri) {
       case "rag://stats":
-        cmd = `${RAG_CMD} stats --output-format json`;
+        cmd = `${RAG_CMD} stats`;  // JSON output is default
         break;
       case "rag://projects":
-        cmd = `${RAG_CMD} projects --output-format json`;
+        cmd = `${RAG_CMD} projects`;  // JSON output is default
         break;
       default:
         return {
