@@ -166,11 +166,46 @@ install_dependencies() {
 setup_rag_system() {
     log_info "RAGシステムをセットアップ中..."
     
-    # ソースコードの配置（実際のプロジェクトでは git clone など）
+    # ソースコードの配置
     if [ ! -d "$RAG_HOME/src" ]; then
-        mkdir -p "$RAG_HOME/src"
-        # TODO: 実際のデプロイ時はここで git clone
-        log_warning "ソースコードを $RAG_HOME/src に配置してください"
+        log_info "ソースコードをGitHubからクローン中..."
+        git clone https://github.com/YutaroOgura/rag-second-brain.git "$RAG_HOME/src"
+        
+        # 仮想環境でインストール
+        log_info "RAGモジュールをインストール中..."
+        cd "$RAG_HOME/src"
+        source "$RAG_HOME/venv/bin/activate"
+        
+        # setup.pyを作成（README不要版）
+        cat > setup.py << 'EOSETUP'
+from setuptools import setup, find_packages
+
+setup(
+    name="rag-second-brain",
+    version="1.0.0",
+    packages=find_packages(),
+    description="RAG Second Brain - Document Management System",
+    install_requires=[
+        "chromadb>=0.4.22",
+        "sentence-transformers>=2.2.2",
+        "click>=8.1.7",
+        "rich>=13.7.0",
+        "pyyaml>=6.0",
+    ],
+    entry_points={
+        "console_scripts": [
+            "rag=rag.cli.main:cli",
+        ],
+    },
+    python_requires=">=3.8",
+)
+EOSETUP
+        
+        # モジュールをインストール
+        pip install -e .
+        log_success "✓ RAGモジュールインストール完了"
+    else
+        log_info "ソースコードは既に存在します: $RAG_HOME/src"
     fi
     
     # 設定ファイルの作成
@@ -184,7 +219,7 @@ database:
   collection_name: "documents"
 
 embedding:
-  model: "sentence-transformers/multilingual-e5-base"
+  model: "intfloat/multilingual-e5-base"  # 日本語含む多言語対応
   batch_size: 32
   device: "cpu"
 
