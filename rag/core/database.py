@@ -20,13 +20,15 @@ class DatabaseManager:
         Args:
             path: Path to ChromaDB persistent storage
         """
-        self.path = path
+        # Expand user home directory
+        import os
+        self.path = os.path.expanduser(path)
         self.collection = None
         
         try:
             # Create ChromaDB client with persistent storage
             self.client = chromadb.PersistentClient(
-                path=path,
+                path=self.path,
                 settings=Settings(
                     anonymized_telemetry=False,
                     allow_reset=True

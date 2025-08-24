@@ -257,6 +257,47 @@ def projects():
 
 
 @cli.command()
+@click.argument('project_id')
+@click.option('--confirm', is_flag=True, help='Skip confirmation prompt')
+def delete_project(project_id, confirm):
+    """Delete all documents for a specific project"""
+    console = Console()
+    
+    # Initialize database
+    console.print("Initializing database...")
+    config = load_config()
+    db_path = config.get('database', {}).get('path', '~/.rag/chroma')
+    db_manager = DatabaseManager(db_path)
+    
+    # Get documents for this project
+    collection = db_manager.create_collection()
+    
+    # Query for documents with this project_id
+    results = collection.get(
+        where={"project_id": project_id}
+    )
+    
+    if not results or not results['ids']:
+        console.print(f"[yellow]No documents found for project: {project_id}[/yellow]")
+        return
+    
+    doc_count = len(results['ids'])
+    console.print(f"[yellow]Found {doc_count} documents for project: {project_id}[/yellow]")
+    
+    # Confirmation
+    if not confirm:
+        if not click.confirm(f"Are you sure you want to delete all {doc_count} documents for project '{project_id}'?"):
+            console.print("[red]Deletion cancelled[/red]")
+            return
+    
+    # Delete documents
+    console.print(f"Deleting {doc_count} documents...")
+    collection.delete(ids=results['ids'])
+    
+    console.print(f"[green]✓ Successfully deleted {doc_count} documents for project: {project_id}[/green]")
+
+
+@cli.command()
 @click.option('--project', '-p', help='Filter by project ID')
 @click.option('--limit', '-l', default=10, help='Maximum number of documents to show')
 def documents(project: Optional[str], limit: int):
