@@ -13,8 +13,9 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.query_preprocessor import QueryPreprocessor
-from rag.core.search_engine import SearchEngine
-from rag.core.index_manager import IndexManager
+from rag.core.search import SearchEngine
+from rag.core.database import DatabaseManager
+from rag.core.vectorizer import Vectorizer
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +51,19 @@ class FallbackSearchEngine:
         """
         self.preprocessor = QueryPreprocessor(compound_terms_path)
         
-        # 既存の検索エンジンとインデックスマネージャーを初期化
-        self.index_manager = IndexManager(
-            index_path=index_path or str(Path.home() / ".rag" / "indices")
-        )
-        self.search_engine = SearchEngine(
-            index_manager=self.index_manager,
-            embedding_model=embedding_model or "intfloat/multilingual-e5-base"
-        )
+        # 既存のRAGシステムコンポーネントを初期化
+        try:
+            self.database = DatabaseManager()
+            self.vectorizer = Vectorizer(
+                model_name=embedding_model or "intfloat/multilingual-e5-base"
+            )
+            self.search_engine = SearchEngine(
+                database=self.database,
+                vectorizer=self.vectorizer
+            )
+        except Exception as e:
+            logger.warning(f"RAGシステムの初期化に失敗: {e}")
+            self.search_engine = None
         
     async def search_with_fallback(
         self,
@@ -178,25 +184,53 @@ class FallbackSearchEngine:
         Returns:
             検索結果のリスト
         """
-        # 既存のSearchEngineのsearchメソッドを呼び出す
-        results = self.search_engine.search(
-            query=query,
-            search_type=search_type,
-            top_k=limit,
-            project_id=project_id
-        )
+        if not self.search_engine:
+            raise Exception("検索エンジンが初期化されていません")
         
-        # 結果を辞書形式に変換
-        formatted_results = []
-        for result in results:
-            formatted_results.append({
-                'document_id': result.get('id', ''),
-                'content': result.get('content', ''),
-                'score': result.get('score', 0.0),
-                'metadata': result.get('metadata', {})
-            })
+        # プロジェクトフィルターを設定
+        filters = {}
+        if project_id:
+            filters["project_id"] = project_id
         
-        return formatted_results
+        # 検索タイプに応じて適切なメソッドを呼び出す
+        try:
+            if search_type == "vector":
+                results = self.search_engine.vector_search(
+                    query=query,
+                    top_k=limit,
+                    project_id=project_id,
+                    filters=filters if filters else None
+                )
+            elif search_type == "keyword":
+                results = self.search_engine.keyword_search(
+                    query=query,
+                    top_k=limit,
+                    project_id=project_id,
+                    filters=filters if filters else None
+                )
+            else:  # hybrid
+                results = self.search_engine.hybrid_search(
+                    query=query,
+                    top_k=limit,
+                    project_id=project_id,
+                    filters=filters if filters else None
+                )
+            
+            # 結果を辞書形式に変換
+            formatted_results = []
+            for result in results.get("results", []):
+                formatted_results.append({
+                    'document_id': result.get('id', ''),
+                    'content': result.get('text', ''),
+                    'score': result.get('score', 0.0),
+                    'metadata': result.get('metadata', {})
+                })
+            
+            return formatted_results
+            
+        except Exception as e:
+            logger.error(f"検索実行エラー: {e}")
+            return []
     
     def _create_search_result(self, result_dict: Dict[str, Any], method: str) -> SearchResult:
         """
