@@ -12,21 +12,21 @@ class TestVectorizer:
     
     def test_init_with_default_model(self):
         """Test initialization with default model."""
-        with patch('sentence_transformers.SentenceTransformer') as mock_st:
+        with patch('rag.core.vectorizer.SentenceTransformer') as mock_st:
             mock_model = Mock()
             mock_st.return_value = mock_model
             
             vectorizer = Vectorizer()
             
-            assert vectorizer.model_name == "sentence-transformers/multilingual-e5-base"
+            assert vectorizer.model_name == "intfloat/multilingual-e5-base"
             assert vectorizer.model == mock_model
-            mock_st.assert_called_once_with("sentence-transformers/multilingual-e5-base", device="cpu")
+            mock_st.assert_called_once_with("intfloat/multilingual-e5-base", device="cpu")
     
     def test_init_with_custom_model(self):
         """Test initialization with custom model."""
         custom_model = "sentence-transformers/all-MiniLM-L6-v2"
         
-        with patch('sentence_transformers.SentenceTransformer') as mock_st:
+        with patch('rag.core.vectorizer.SentenceTransformer') as mock_st:
             mock_model = Mock()
             mock_st.return_value = mock_model
             

@@ -1,0 +1,26 @@
+{
+  "name": "rag-second-brain-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for RAG Second Brain Document Management System",
+  "type": "module",
+  "main": "mcp-server.js",
+  "scripts": {
+    "start": "node mcp-server.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "mcp",
+    "rag",
+    "ai",
+    "claude",
+    "document-management"
+  ],
+  "author": "Yutaro Ogura",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

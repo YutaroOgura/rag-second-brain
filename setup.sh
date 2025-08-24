@@ -270,6 +270,34 @@ EOF
 setup_mcp_server() {
     log_info "MCPサーバーをセットアップ中..."
     
+    # Node.jsのチェック
+    if ! command -v node &> /dev/null; then
+        log_warning "Node.jsが見つかりません。MCPサーバーにはNode.js 18以上が必要です"
+        log_info "インストール方法:"
+        log_info "  Ubuntu/Debian: curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - && sudo apt-get install -y nodejs"
+        log_info "  macOS: brew install node"
+    else
+        log_info "Node.js version: $(node --version)"
+        
+        # Node.js版MCPサーバーのセットアップ
+        log_info "Node.js版MCPサーバーをインストール中..."
+        
+        # MCPサーバーファイルをコピー
+        if [ -f "$RAG_HOME/src/mcp-server.js" ]; then
+            cp "$RAG_HOME/src/mcp-server.js" "$RAG_HOME/mcp-server.js"
+            cp "$RAG_HOME/src/package.json" "$RAG_HOME/package.json"
+        fi
+        
+        # npmパッケージをインストール
+        if [ -f "$RAG_HOME/package.json" ]; then
+            cd "$RAG_HOME"
+            log_info "MCP SDKをインストール中..."
+            npm install --silent 2>/dev/null || npm install
+            log_success "✓ MCP SDKインストール完了"
+            cd - > /dev/null
+        fi
+    fi
+    
     # MCP設定ファイルの作成
     MCP_CONFIG="$HOME/.claude_code_mcp.json"
     if [ ! -f "$MCP_CONFIG" ]; then
@@ -278,12 +306,10 @@ setup_mcp_server() {
 {
   "mcpServers": {
     "rag-second-brain": {
-      "command": "python3",
-      "args": ["-m", "rag.mcp.server"],
-      "cwd": "$RAG_HOME/src",
+      "command": "node",
+      "args": ["$RAG_HOME/mcp-server.js"],
       "env": {
-        "RAG_CONFIG_PATH": "$RAG_CONFIG",
-        "PYTHONPATH": "$RAG_HOME/src"
+        "RAG_HOME": "$RAG_HOME"
       }
     }
   }
