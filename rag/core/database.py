@@ -50,16 +50,17 @@ class DatabaseManager:
             # Try to get existing collection first
             self.collection = self.client.get_collection(name)
             logger.info(f"Retrieved existing collection: {name}")
-        except chromadb.errors.InvalidCollectionException:
+        except Exception:
             # Collection doesn't exist, create new one
-            self.collection = self.client.create_collection(
-                name=name,
-                metadata={"hnsw:space": "cosine"}  # Use cosine similarity
-            )
-            logger.info(f"Created new collection: {name}")
-        except Exception as e:
-            logger.error(f"Failed to create/get collection {name}: {e}")
-            raise
+            try:
+                self.collection = self.client.create_collection(
+                    name=name,
+                    metadata={"hnsw:space": "cosine"}  # Use cosine similarity
+                )
+                logger.info(f"Created new collection: {name}")
+            except Exception as e:
+                logger.error(f"Failed to create/get collection {name}: {e}")
+                raise
         
         return self.collection
     
