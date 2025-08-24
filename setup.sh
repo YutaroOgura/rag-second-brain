@@ -115,20 +115,49 @@ install_dependencies() {
     
     # 必須パッケージのインストール
     log_info "必須パッケージをインストール中..."
-    pip install chromadb>=0.4.22
-    pip install sentence-transformers>=2.2.2
-    pip install click>=8.1.7
-    pip install rich>=13.7.0
-    pip install pyyaml>=6.0.1
-    pip install numpy>=1.24.0
-    pip install python-dotenv>=1.0.0
-    pip install pydantic>=2.5.0
+    log_warning "⏱️  インストールには5-15分程度かかる場合があります（回線速度により異なります）"
+    
+    # ChromaDB（軽量・高速）
+    log_info "[1/8] ChromaDB（ベクトルデータベース）をインストール中..."
+    pip install --progress-bar on chromadb>=0.4.22
+    log_success "✓ ChromaDBインストール完了"
+    
+    # sentence-transformers（最も時間がかかる）
+    log_info "[2/8] sentence-transformers（埋め込みモデル）をインストール中..."
+    log_warning "⚠️  このパッケージは大きいため5-10分かかる場合があります"
+    pip install --progress-bar on sentence-transformers>=2.2.2
+    log_success "✓ sentence-transformersインストール完了"
+    
+    # CLI関連（軽量）
+    log_info "[3/8] Click（CLIフレームワーク）をインストール中..."
+    pip install --progress-bar on click>=8.1.7
+    log_success "✓ Clickインストール完了"
+    
+    log_info "[4/8] Rich（ターミナルUI）をインストール中..."
+    pip install --progress-bar on rich>=13.7.0
+    log_success "✓ Richインストール完了"
+    
+    # その他の依存関係
+    log_info "[5/8] PyYAML（設定ファイル）をインストール中..."
+    pip install --progress-bar on pyyaml>=6.0.1
+    log_success "✓ PyYAMLインストール完了"
+    
+    log_info "[6/8] NumPy（数値計算）をインストール中..."
+    pip install --progress-bar on numpy>=1.24.0
+    log_success "✓ NumPyインストール完了"
+    
+    log_info "[7/8] python-dotenv（環境変数）をインストール中..."
+    pip install --progress-bar on python-dotenv>=1.0.0
+    log_success "✓ python-dotenvインストール完了"
+    
+    log_info "[8/8] Pydantic（データ検証）をインストール中..."
+    pip install --progress-bar on pydantic>=2.5.0
+    log_success "✓ Pydanticインストール完了"
     
     # オプショナルパッケージ
-    log_info "オプショナルパッケージをインストール中..."
-    pip install pytest>=7.4.3
-    pip install pytest-asyncio>=0.21.1
-    pip install pytest-cov>=4.1.0
+    log_info "オプショナルパッケージ（テストツール）をインストール中..."
+    pip install --progress-bar on pytest>=7.4.3 pytest-asyncio>=0.21.1 pytest-cov>=4.1.0
+    log_success "✓ テストツールインストール完了"
     
     log_success "依存関係のインストール完了"
 }
