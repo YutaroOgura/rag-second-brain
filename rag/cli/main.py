@@ -399,11 +399,19 @@ def _output_search_results(results: dict, output_format: str, query: str):
             query_words = query.lower().split()
             for word in query_words:
                 if word in content.lower():
-                    content_text.highlight_regex(
-                        rf'\b{re.escape(word)}\b', 
-                        style="bold yellow",
-                        case_sensitive=False
-                    )
+                    # Rich library version compatibility fix
+                    try:
+                        content_text.highlight_regex(
+                            rf'\b{re.escape(word)}\b', 
+                            style="bold yellow"
+                        )
+                    except TypeError:
+                        # Fallback for older versions
+                        content_text.highlight_words(
+                            [word],
+                            style="bold yellow",
+                            case_sensitive=False
+                        )
             
             table.add_row(
                 str(i),
