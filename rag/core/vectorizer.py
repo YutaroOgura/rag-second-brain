@@ -14,7 +14,7 @@ class Vectorizer:
     
     def __init__(
         self, 
-        model_name: str = "sentence-transformers/multilingual-e5-base",
+        model_name: str = "intfloat/multilingual-e5-base",
         device: str = "cpu"
     ):
         """Initialize vectorizer with specified model.

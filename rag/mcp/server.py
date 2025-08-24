@@ -31,6 +31,32 @@ except ImportError:
         def read_resource(self, uri: str): pass
         def call_tool(self, name: str, arguments: dict): pass
         def get_prompt(self, name: str, arguments: dict): pass
+    
+    class TextContent:
+        def __init__(self, type: str = "text", text: str = ""):
+            self.type = type
+            self.text = text
+    
+    class Resource:
+        pass
+    
+    class Tool:
+        pass
+    
+    class Prompt:
+        pass
+    
+    class ImageContent:
+        pass
+    
+    class EmbeddedResource:
+        pass
+    
+    class InitializationOptions:
+        pass
+    
+    def stdio_server(*args, **kwargs):
+        return lambda: None
 
 from ..core.database import DatabaseManager
 from ..core.vectorizer import Vectorizer
