@@ -1,5 +1,6 @@
 """Document loader for various file formats."""
 
+import json
 import logging
 import mimetypes
 from pathlib import Path
@@ -231,10 +232,12 @@ class DocumentLoader:
         # Extract headings for markdown
         headings = re.findall(r'^(#{1,6})\s+(.+)$', content, re.MULTILINE)
         if headings:
-            metadata["headings"] = [
+            # Convert headings to JSON string for ChromaDB compatibility
+            headings_list = [
                 {"level": len(level), "text": text.strip()}
                 for level, text in headings
             ]
+            metadata["headings"] = json.dumps(headings_list)
         
         return metadata
     
