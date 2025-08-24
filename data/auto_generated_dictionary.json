@@ -1,0 +1,506 @@
+{
+  "compound_terms": {
+    "Slack通知": {
+      "tokens": [
+        "Slack",
+        "通知"
+      ],
+      "synonyms": [
+        "Slack notification",
+        "スラック通知",
+        "Slack 通知"
+      ],
+      "weight": 1.0
+    },
+    "環境変数": {
+      "tokens": [
+        "環境",
+        "変数"
+      ],
+      "synonyms": [
+        "environment variable",
+        "env var",
+        "環境 変数"
+      ],
+      "weight": 0.9
+    },
+    "バッチ処理": {
+      "tokens": [
+        "バッチ",
+        "処理"
+      ],
+      "synonyms": [
+        "batch processing",
+        "batch",
+        "バッチ 処理"
+      ],
+      "weight": 0.9
+    },
+    "API認証": {
+      "tokens": [
+        "API",
+        "認証"
+      ],
+      "synonyms": [
+        "API authentication",
+        "API auth",
+        "API 認証"
+      ],
+      "weight": 0.95
+    },
+    "データベース接続": {
+      "tokens": [
+        "データベース",
+        "接続"
+      ],
+      "synonyms": [
+        "database connection",
+        "DB connection",
+        "DB接続",
+        "データベース 接続"
+      ],
+      "weight": 0.9
+    },
+    "エラーハンドリング": {
+      "tokens": [
+        "エラー",
+        "ハンドリング"
+      ],
+      "synonyms": [
+        "error handling",
+        "exception handling",
+        "エラー処理",
+        "エラー ハンドリング"
+      ],
+      "weight": 0.85
+    },
+    "ユニットテスト": {
+      "tokens": [
+        "ユニット",
+        "テスト"
+      ],
+      "synonyms": [
+        "unit test",
+        "unit testing",
+        "単体テスト",
+        "ユニット テスト"
+      ],
+      "weight": 0.9
+    },
+    "キャッシュ設定": {
+      "tokens": [
+        "キャッシュ",
+        "設定"
+      ],
+      "synonyms": [
+        "cache configuration",
+        "cache config",
+        "cache setting",
+        "キャッシュ 設定"
+      ],
+      "weight": 0.85
+    },
+    "ログ出力": {
+      "tokens": [
+        "ログ",
+        "出力"
+      ],
+      "synonyms": [
+        "log output",
+        "logging",
+        "ログ記録",
+        "ログ 出力"
+      ],
+      "weight": 0.9
+    },
+    "非同期処理": {
+      "tokens": [
+        "非同期",
+        "処理"
+      ],
+      "synonyms": [
+        "async processing",
+        "asynchronous",
+        "async",
+        "非同期 処理"
+      ],
+      "weight": 0.9
+    },
+    "Docker環境": {
+      "tokens": [
+        "Docker",
+        "環境"
+      ],
+      "synonyms": [
+        "Docker environment",
+        "container environment",
+        "Docker 環境"
+      ],
+      "weight": 0.95
+    },
+    "Git管理": {
+      "tokens": [
+        "Git",
+        "管理"
+      ],
+      "synonyms": [
+        "Git management",
+        "version control",
+        "バージョン管理",
+        "Git 管理"
+      ],
+      "weight": 0.85
+    },
+    "CI/CD": {
+      "tokens": [
+        "CI",
+        "CD"
+      ],
+      "synonyms": [
+        "continuous integration",
+        "continuous deployment",
+        "CI CD"
+      ],
+      "weight": 1.0
+    },
+    "JWT認証": {
+      "tokens": [
+        "JWT",
+        "認証"
+      ],
+      "synonyms": [
+        "JWT authentication",
+        "JSON Web Token",
+        "JWT auth",
+        "JWT 認証"
+      ],
+      "weight": 0.95
+    },
+    "Redis接続": {
+      "tokens": [
+        "Redis",
+        "接続"
+      ],
+      "synonyms": [
+        "Redis connection",
+        "Redis connect",
+        "Redis 接続"
+      ],
+      "weight": 0.9
+    },
+    "PostgreSQL": {
+      "tokens": [
+        "PostgreSQL"
+      ],
+      "synonyms": [
+        "Postgres",
+        "PG",
+        "ポストグレス"
+      ],
+      "weight": 0.95
+    },
+    "Laravel設定": {
+      "tokens": [
+        "Laravel",
+        "設定"
+      ],
+      "synonyms": [
+        "Laravel configuration",
+        "Laravel config",
+        "Laravel 設定"
+      ],
+      "weight": 0.9
+    },
+    "Vue.js": {
+      "tokens": [
+        "Vue",
+        "js"
+      ],
+      "synonyms": [
+        "Vue",
+        "VueJS",
+        "Vue.js framework"
+      ],
+      "weight": 0.95
+    },
+    "マイグレーション": {
+      "tokens": [
+        "マイグレーション"
+      ],
+      "synonyms": [
+        "migration",
+        "DB migration",
+        "データベースマイグレーション"
+      ],
+      "weight": 0.9
+    },
+    "セキュリティ設定": {
+      "tokens": [
+        "セキュリティ",
+        "設定"
+      ],
+      "synonyms": [
+        "security configuration",
+        "security settings",
+        "セキュリティ 設定"
+      ],
+      "weight": 0.95
+    },
+    "APIエンドポイント": {
+      "tokens": [
+        "API",
+        "エンドポイント"
+      ],
+      "synonyms": [
+        "API endpoint",
+        "REST endpoint",
+        "API URL",
+        "API エンドポイント"
+      ],
+      "weight": 0.9
+    },
+    "認証トークン": {
+      "tokens": [
+        "認証",
+        "トークン"
+      ],
+      "synonyms": [
+        "auth token",
+        "authentication token",
+        "access token",
+        "認証 トークン"
+      ],
+      "weight": 0.9
+    },
+    "エラーコード": {
+      "tokens": [
+        "エラー",
+        "コード"
+      ],
+      "synonyms": [
+        "error code",
+        "error number",
+        "エラー番号",
+        "エラー コード"
+      ],
+      "weight": 0.85
+    },
+    "Ultra Pay": {
+      "tokens": [
+        "Ultra",
+        "Pay"
+      ],
+      "synonyms": [
+        "UltraPay",
+        "Ultra Pay VISA",
+        "ウルトラペイ"
+      ],
+      "weight": 1.0
+    },
+    "PayBlend": {
+      "tokens": [
+        "PayBlend"
+      ],
+      "synonyms": [
+        "Pay Blend",
+        "ペイブレンド"
+      ],
+      "weight": 1.0
+    },
+    "プリペイドカード": {
+      "tokens": [
+        "プリペイド",
+        "カード"
+      ],
+      "synonyms": [
+        "prepaid card",
+        "プリペイド カード"
+      ],
+      "weight": 0.95
+    },
+    "AWS S3": {
+      "tokens": [
+        "AWS",
+        "S3"
+      ],
+      "synonyms": [
+        "Amazon S3",
+        "Simple Storage Service",
+        "S3 bucket"
+      ],
+      "weight": 0.95
+    },
+    "AWS SES": {
+      "tokens": [
+        "AWS",
+        "SES"
+      ],
+      "synonyms": [
+        "Amazon SES",
+        "Simple Email Service"
+      ],
+      "weight": 0.95
+    },
+    "AWS Pinpoint": {
+      "tokens": [
+        "AWS",
+        "Pinpoint"
+      ],
+      "synonyms": [
+        "Amazon Pinpoint",
+        "Pinpoint"
+      ],
+      "weight": 0.95
+    },
+    "GMO決済": {
+      "tokens": [
+        "GMO",
+        "決済"
+      ],
+      "synonyms": [
+        "GMO payment",
+        "GMOペイメント",
+        "GMO 決済"
+      ],
+      "weight": 0.9
+    },
+    "セブン銀行": {
+      "tokens": [
+        "セブン",
+        "銀行"
+      ],
+      "synonyms": [
+        "Seven Bank",
+        "7bank",
+        "セブン 銀行"
+      ],
+      "weight": 0.9
+    },
+    "ATM連携": {
+      "tokens": [
+        "ATM",
+        "連携"
+      ],
+      "synonyms": [
+        "ATM integration",
+        "ATM connection",
+        "ATM 連携"
+      ],
+      "weight": 0.85
+    },
+    "TIS連携": {
+      "tokens": [
+        "TIS",
+        "連携"
+      ],
+      "synonyms": [
+        "TIS integration",
+        "TIS VISA",
+        "TIS 連携"
+      ],
+      "weight": 0.9
+    },
+    "SMS送信": {
+      "tokens": [
+        "SMS",
+        "送信"
+      ],
+      "synonyms": [
+        "SMS send",
+        "SMS notification",
+        "SMS 送信"
+      ],
+      "weight": 0.9
+    },
+    "Webhook設定": {
+      "tokens": [
+        "Webhook",
+        "設定"
+      ],
+      "synonyms": [
+        "webhook configuration",
+        "webhook config",
+        "Webhook 設定"
+      ],
+      "weight": 0.85
+    },
+    "Multi-tenant": {
+      "tokens": [
+        "Multi",
+        "tenant"
+      ],
+      "synonyms": [
+        "マルチテナント",
+        "multi tenancy",
+        "複数テナント"
+      ],
+      "weight": 0.9
+    },
+    "決済処理": {
+      "tokens": [
+        "決済",
+        "処理"
+      ],
+      "synonyms": [
+        "payment processing",
+        "payment",
+        "決済 処理"
+      ],
+      "weight": 0.95
+    },
+    "カード発行": {
+      "tokens": [
+        "カード",
+        "発行"
+      ],
+      "synonyms": [
+        "card issuance",
+        "card issue",
+        "カード 発行"
+      ],
+      "weight": 0.9
+    },
+    "残高照会": {
+      "tokens": [
+        "残高",
+        "照会"
+      ],
+      "synonyms": [
+        "balance inquiry",
+        "balance check",
+        "残高 照会"
+      ],
+      "weight": 0.85
+    },
+    "取引履歴": {
+      "tokens": [
+        "取引",
+        "履歴"
+      ],
+      "synonyms": [
+        "transaction history",
+        "transaction log",
+        "取引 履歴"
+      ],
+      "weight": 0.9
+    },
+    "本人確認": {
+      "tokens": [
+        "本人",
+        "確認"
+      ],
+      "synonyms": [
+        "identity verification",
+        "KYC",
+        "本人 確認"
+      ],
+      "weight": 0.95
+    }
+  },
+  "meta": {
+    "updated_at": "2025-01-24",
+    "version": "2.0.0",
+    "total_terms": 41,
+    "auto_generated_count": 0
+  }
+}

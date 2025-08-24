@@ -13,9 +13,8 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.query_preprocessor import QueryPreprocessor
-from rag.core.search import SearchEngine
-from rag.core.database import DatabaseManager
-from rag.core.vectorizer import Vectorizer
+from src.japanese_analyzer import JapaneseAnalyzer
+from src.dictionary_generator import DictionaryGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -51,19 +50,14 @@ class FallbackSearchEngine:
         """
         self.preprocessor = QueryPreprocessor(compound_terms_path)
         
-        # 既存のRAGシステムコンポーネントを初期化
-        try:
-            self.database = DatabaseManager()
-            self.vectorizer = Vectorizer(
-                model_name=embedding_model or "intfloat/multilingual-e5-base"
-            )
-            self.search_engine = SearchEngine(
-                database=self.database,
-                vectorizer=self.vectorizer
-            )
-        except Exception as e:
-            logger.warning(f"RAGシステムの初期化に失敗: {e}")
-            self.search_engine = None
+        # Phase 2: 日本語解析器の追加
+        self.japanese_analyzer = JapaneseAnalyzer(compound_terms_path)
+        
+        # Phase 2対応フラグ
+        self.use_japanese_analysis = True
+        
+        # 既存のRAGシステムは直接呼び出しに変更
+        self.search_engine = None  # Phase 1/2では外部RAGコマンドを使用
         
     async def search_with_fallback(
         self,
@@ -350,3 +344,127 @@ class FallbackSearchEngine:
         return loop.run_until_complete(
             self.search_with_fallback(query, search_type, top_k, min_results, project_id)
         )
+    
+    def enhance_query_with_japanese_analysis(self, query: str) -> List[str]:
+        """
+        Phase 2: 日本語形態素解析を使用したクエリ拡張
+        
+        Args:
+            query: 元のクエリ
+            
+        Returns:
+            拡張されたクエリのリスト
+        """
+        if not self.use_japanese_analysis:
+            return self.preprocessor.preprocess(query)
+        
+        enhanced_queries = [query]  # 元のクエリは必ず含める
+        
+        try:
+            # 形態素解析による分解
+            morphemes = self.japanese_analyzer.analyze(query)
+            
+            # 意味のある名詞・動詞を抽出
+            meaningful_terms = []
+            for morph in morphemes:
+                if (morph['pos'].startswith('名詞') or 
+                    morph['pos'].startswith('動詞')):
+                    meaningful_terms.append(morph['surface'])
+            
+            # 複合語を抽出
+            compounds = self.japanese_analyzer.extract_compound_words(query)
+            
+            # トークン組み合わせ生成
+            if meaningful_terms:
+                # スペース区切りバージョン
+                spaced_query = ' '.join(meaningful_terms)
+                if spaced_query != query:
+                    enhanced_queries.append(spaced_query)
+                
+                # 部分的な組み合わせ
+                if len(meaningful_terms) >= 2:
+                    for i in range(len(meaningful_terms) - 1):
+                        partial = ' '.join(meaningful_terms[i:i+2])
+                        enhanced_queries.append(partial)
+            
+            # 複合語の分割バージョン
+            for compound in compounds:
+                tokens = self.japanese_analyzer.tokenize(compound)
+                if len(tokens) > 1:
+                    enhanced_queries.append(' '.join(tokens))
+            
+            # 従来の前処理も併用
+            traditional_enhanced = self.preprocessor.preprocess(query)
+            enhanced_queries.extend(traditional_enhanced)
+            
+        except Exception as e:
+            logger.warning(f"日本語解析でエラー: {e}")
+            # フォールバック: 従来の前処理のみ
+            enhanced_queries.extend(self.preprocessor.preprocess(query))
+        
+        # 重複除去と長さ制限
+        unique_queries = []
+        seen = set()
+        for q in enhanced_queries:
+            if q and q not in seen and len(q) >= 2:
+                unique_queries.append(q)
+                seen.add(q)
+        
+        return unique_queries[:8]  # 最大8個のクエリバリエーション
+    
+    def analyze_query_complexity(self, query: str) -> Dict[str, Any]:
+        """
+        Phase 2: クエリの複雑度を解析
+        
+        Args:
+            query: 解析対象クエリ
+            
+        Returns:
+            解析結果の辞書
+        """
+        analysis = {
+            'original_query': query,
+            'length': len(query),
+            'has_japanese': bool(self.japanese_analyzer._is_japanese(query)),
+            'morphemes': [],
+            'compounds': [],
+            'technical_terms': [],
+            'complexity_score': 0.0
+        }
+        
+        if not self.use_japanese_analysis:
+            return analysis
+        
+        try:
+            # 形態素解析
+            morphemes = self.japanese_analyzer.analyze(query)
+            analysis['morphemes'] = morphemes
+            
+            # 複合語抽出
+            compounds = self.japanese_analyzer.extract_compound_words(query)
+            analysis['compounds'] = compounds
+            
+            # 専門用語の検出
+            technical_terms = [
+                term for term in self.japanese_analyzer.technical_terms 
+                if term in query
+            ]
+            analysis['technical_terms'] = technical_terms
+            
+            # 複雑度スコア算出
+            score = 0.0
+            score += len(morphemes) * 0.1  # 形態素数
+            score += len(compounds) * 0.3  # 複合語数
+            score += len(technical_terms) * 0.5  # 専門用語数
+            
+            # 混在文字種のボーナス
+            if (any(m['pos'].startswith('名詞-英語') for m in morphemes) and
+                any(m['pos'].startswith('名詞') and not m['pos'].startswith('名詞-英語') for m in morphemes)):
+                score += 0.2
+            
+            analysis['complexity_score'] = min(score, 2.0)  # 最大2.0
+            
+        except Exception as e:
+            logger.warning(f"クエリ解析でエラー: {e}")
+        
+        return analysis
