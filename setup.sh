@@ -168,8 +168,15 @@ setup_rag_system() {
     
     # ソースコードの配置
     if [ ! -d "$RAG_HOME/src" ]; then
-        log_info "ソースコードをGitHubからクローン中..."
-        git clone https://github.com/YutaroOgura/rag-second-brain.git "$RAG_HOME/src"
+        # ローカルファイルが存在する場合はコピー、なければGitHubからクローン
+        if [ -d "./rag" ] && [ -f "./mcp-server.js" ]; then
+            log_info "ローカルファイルからソースコードをコピー中..."
+            mkdir -p "$RAG_HOME/src"
+            cp -r ./* "$RAG_HOME/src/" 2>/dev/null || true
+        else
+            log_info "ソースコードをGitHubからクローン中..."
+            git clone https://github.com/YutaroOgura/rag-second-brain.git "$RAG_HOME/src"
+        fi
         
         # 仮想環境でインストール
         log_info "RAGモジュールをインストール中..."
@@ -206,6 +213,40 @@ EOSETUP
         log_success "✓ RAGモジュールインストール完了"
     else
         log_info "ソースコードは既に存在します: $RAG_HOME/src"
+    fi
+    
+    # RAGパッケージのコピー（重要：新規追加）
+    log_info "RAGパッケージをコピー中..."
+    
+    # ragディレクトリが存在する場合はコピー
+    if [ -d "./rag" ]; then
+        cp -r ./rag "$RAG_HOME/src/"
+        log_success "✓ RAGパッケージコピー完了"
+    else
+        log_warning "⚠️ ragディレクトリが見つかりません。基本構造のみ作成します。"
+        # 最小限のディレクトリ構造を作成
+        mkdir -p "$RAG_HOME/src/rag/core"
+        mkdir -p "$RAG_HOME/src/rag/cli"
+        echo '"""RAG Second Brain System"""' > "$RAG_HOME/src/rag/__init__.py"
+        echo '__version__ = "1.0.0"' >> "$RAG_HOME/src/rag/__init__.py"
+    fi
+    
+    # Pythonモジュールのコピー
+    log_info "Pythonモジュールをコピー中..."
+    if [ -d "./src" ]; then
+        cp -f ./src/*.py "$RAG_HOME/src/" 2>/dev/null || true
+        log_success "✓ Pythonモジュールコピー完了"
+    fi
+    
+    # MCPサーバーのコピー
+    if [ -f "./mcp-server.js" ]; then
+        cp -f ./mcp-server.js "$RAG_HOME/"
+        log_success "✓ MCPサーバーコピー完了"
+    fi
+    
+    # その他の重要ファイルのコピー
+    if [ -f "./mcp-tools-implementation.js" ]; then
+        cp -f ./mcp-tools-implementation.js "$RAG_HOME/" 2>/dev/null || true
     fi
     
     # 設定ファイルの作成

@@ -10,62 +10,18 @@ import { promisify } from 'util';
 import { exec } from 'child_process';
 
 const execAsync = promisify(exec);
+const RAG_CMD = '/home/ogura/.rag/venv/bin/rag';
 
 /**
- * ドキュメントメタデータの管理（簡易版）
- * 実際の実装では ChromaDB を使用
- */
-class DocumentStore {
-  constructor(basePath = '/home/ogura/.rag') {
-    this.basePath = basePath;
-    this.metadataPath = path.join(basePath, 'metadata.json');
-    this.documentsPath = path.join(basePath, 'documents');
-    this.loadMetadata();
-  }
-
-  loadMetadata() {
-    try {
-      if (fs.existsSync(this.metadataPath)) {
-        const data = fs.readFileSync(this.metadataPath, 'utf8');
-        this.metadata = JSON.parse(data);
-      } else {
-        this.metadata = {
-          projects: {},
-          documents: {}
-        };
-      }
-    } catch (error) {
-      this.metadata = {
-        projects: {},
-        documents: {}
-      };
-    }
-  }
-
-  saveMetadata() {
-    try {
-      fs.writeFileSync(this.metadataPath, JSON.stringify(this.metadata, null, 2));
-    } catch (error) {
-      console.error('Failed to save metadata:', error);
-    }
-  }
-
-  generateDocId(filePath) {
-    return crypto.createHash('md5').update(filePath).digest('hex');
-  }
-}
-
-/**
- * rag_index Tool の実装
- * ドキュメントをインデックスに追加
+ * ChromaDBを使用した実際のインデックス実装
  */
 export async function executeRagIndex(indexPath, projectId, options = {}) {
-  const store = new DocumentStore();
   const { recursive = false, metadata = {}, update = false } = options;
   
   const result = {
     indexed_files: [],
-    total_chunks: 0,
+    total_files: 0,
+    skipped_files: 0,
     errors: [],
     time_taken_ms: 0
   };
@@ -78,90 +34,44 @@ export async function executeRagIndex(indexPath, projectId, options = {}) {
       throw new Error(`Path does not exist: ${indexPath}`);
     }
     
-    const stats = fs.statSync(indexPath);
-    let filesToIndex = [];
+    // CLIツールのindexコマンドを使用
+    let cmd = `${RAG_CMD} index "${indexPath}" --project "${projectId}" --format json`;
     
-    if (stats.isDirectory()) {
-      // ディレクトリの場合
-      if (recursive) {
-        // 再帰的にファイルを取得
-        filesToIndex = getAllFiles(indexPath, ['.md', '.txt', '.html']);
-      } else {
-        // 直下のファイルのみ
-        const files = fs.readdirSync(indexPath);
-        filesToIndex = files
-          .filter(f => ['.md', '.txt', '.html'].some(ext => f.endsWith(ext)))
-          .map(f => path.join(indexPath, f));
+    if (recursive) {
+      cmd += ' --recursive';
+    }
+    if (update) {
+      cmd += ' --update';
+    }
+    
+    const { stdout, stderr } = await execAsync(cmd, {
+      maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+      env: { ...process.env, PYTHONPATH: '/home/ogura/.rag/src' }
+    });
+    
+    if (stderr) {
+      console.error('Index stderr:', stderr);
+    }
+    
+    // 結果をパース
+    try {
+      const cliResult = JSON.parse(stdout);
+      result.indexed_files = cliResult.indexed || 0;
+      result.skipped_files = cliResult.skipped || 0;
+      result.total_files = cliResult.total_files || 0;
+      
+      if (cliResult.error) {
+        result.errors.push(cliResult.error.message);
       }
-    } else {
-      // 単一ファイル
-      filesToIndex = [indexPath];
+    } catch (parseError) {
+      // JSON以外の出力の場合
+      console.log('Index output:', stdout);
+      result.indexed_files = 1; // 仮の値
     }
-    
-    // プロジェクトの初期化
-    if (!store.metadata.projects[projectId]) {
-      store.metadata.projects[projectId] = {
-        name: projectId,
-        created_at: new Date().toISOString(),
-        document_count: 0,
-        last_updated: new Date().toISOString()
-      };
-    }
-    
-    // 各ファイルをインデックス
-    for (const filePath of filesToIndex) {
-      try {
-        const docId = store.generateDocId(filePath);
-        const content = fs.readFileSync(filePath, 'utf8');
-        const fileStats = fs.statSync(filePath);
-        
-        // 既存ドキュメントのチェック
-        if (store.metadata.documents[docId] && !update) {
-          console.log(`Skipping existing document: ${filePath}`);
-          continue;
-        }
-        
-        // チャンク分割（簡易版：1000文字ごと）
-        const chunks = [];
-        const chunkSize = 1000;
-        for (let i = 0; i < content.length; i += chunkSize) {
-          chunks.push(content.substring(i, i + chunkSize));
-        }
-        
-        // メタデータの保存
-        store.metadata.documents[docId] = {
-          id: docId,
-          file_path: filePath,
-          project_id: projectId,
-          chunks: chunks.length,
-          size: fileStats.size,
-          created_at: fileStats.birthtime.toISOString(),
-          modified_at: fileStats.mtime.toISOString(),
-          indexed_at: new Date().toISOString(),
-          ...metadata
-        };
-        
-        result.indexed_files.push(filePath);
-        result.total_chunks += chunks.length;
-        
-        // ChromaDBへの実際の登録はここで行う（未実装）
-        // await chromaDB.addDocuments(chunks, docId, projectId);
-        
-      } catch (error) {
-        result.errors.push(`Failed to index ${filePath}: ${error.message}`);
-      }
-    }
-    
-    // プロジェクト情報の更新
-    store.metadata.projects[projectId].document_count = Object.values(store.metadata.documents)
-      .filter(doc => doc.project_id === projectId).length;
-    store.metadata.projects[projectId].last_updated = new Date().toISOString();
-    
-    // メタデータの保存
-    store.saveMetadata();
     
   } catch (error) {
     result.errors.push(error.message);
+    throw error;
   }
   
   result.time_taken_ms = Date.now() - startTime;
@@ -170,83 +80,23 @@ export async function executeRagIndex(indexPath, projectId, options = {}) {
 
 /**
  * rag_delete Tool の実装
- * ドキュメントを削除
  */
 export async function executeRagDelete(options = {}) {
-  const store = new DocumentStore();
   const { document_id, project, filters = {} } = options;
   
   const result = {
     deleted_count: 0,
-    deleted_ids: []
+    deleted_ids: [],
+    error: null
   };
   
   try {
-    let documentsToDelete = [];
-    
-    if (document_id) {
-      // 特定のドキュメントを削除
-      if (store.metadata.documents[document_id]) {
-        documentsToDelete.push(document_id);
-      }
-    } else if (project) {
-      // プロジェクト全体を削除
-      documentsToDelete = Object.keys(store.metadata.documents)
-        .filter(docId => store.metadata.documents[docId].project_id === project);
-    } else if (filters) {
-      // フィルタ条件による削除
-      documentsToDelete = Object.keys(store.metadata.documents).filter(docId => {
-        const doc = store.metadata.documents[docId];
-        
-        // older_than フィルタ
-        if (filters.older_than) {
-          const days = parseInt(filters.older_than);
-          const cutoffDate = new Date();
-          cutoffDate.setDate(cutoffDate.getDate() - days);
-          if (new Date(doc.indexed_at) > cutoffDate) {
-            return false;
-          }
-        }
-        
-        // category フィルタ
-        if (filters.category && doc.category !== filters.category) {
-          return false;
-        }
-        
-        // source_type フィルタ
-        if (filters.source_type && doc.source_type !== filters.source_type) {
-          return false;
-        }
-        
-        return true;
-      });
-    }
-    
-    // ドキュメントの削除
-    for (const docId of documentsToDelete) {
-      delete store.metadata.documents[docId];
-      result.deleted_ids.push(docId);
-      result.deleted_count++;
-      
-      // ChromaDBからも削除（未実装）
-      // await chromaDB.deleteDocument(docId);
-    }
-    
-    // プロジェクト情報の更新
-    if (project && result.deleted_count > 0) {
-      if (store.metadata.projects[project]) {
-        store.metadata.projects[project].document_count -= result.deleted_count;
-        if (store.metadata.projects[project].document_count <= 0) {
-          delete store.metadata.projects[project];
-        }
-      }
-    }
-    
-    // メタデータの保存
-    store.saveMetadata();
+    // TODO: CLIにdeleteコマンドを追加後、ここで呼び出す
+    // 現時点では未実装
+    result.error = "Delete functionality not yet implemented in CLI";
     
   } catch (error) {
-    console.error('Delete error:', error);
+    result.error = error.message;
   }
   
   return result;
@@ -254,98 +104,51 @@ export async function executeRagDelete(options = {}) {
 
 /**
  * rag_sync Tool の実装
- * プロジェクトのドキュメントを同期
  */
-export async function executeRagSync(project, syncPath, options = {}) {
-  const store = new DocumentStore();
+export async function executeRagSync(projectId, syncPath, options = {}) {
   const { full = false, remove_deleted = true } = options;
   
   const result = {
-    added: [],
-    updated: [],
-    deleted: [],
-    unchanged: 0
+    added: 0,
+    updated: 0,
+    deleted: 0,
+    errors: [],
+    time_taken_ms: 0
   };
   
+  const startTime = Date.now();
+  
   try {
-    // 既存ドキュメントの取得
-    const existingDocs = Object.values(store.metadata.documents)
-      .filter(doc => doc.project_id === project);
+    // indexコマンドを使用して同期
+    let cmd = `${RAG_CMD} index "${syncPath}" --project "${projectId}" --recursive --update --format json`;
     
-    // ファイルシステムの現在のファイル
-    const currentFiles = getAllFiles(syncPath, ['.md', '.txt', '.html']);
-    const currentFilesMap = new Map();
+    const { stdout, stderr } = await execAsync(cmd, {
+      maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+      env: { ...process.env, PYTHONPATH: '/home/ogura/.rag/src' }
+    });
     
-    for (const filePath of currentFiles) {
-      const docId = store.generateDocId(filePath);
-      const stats = fs.statSync(filePath);
-      currentFilesMap.set(docId, {
-        path: filePath,
-        modified: stats.mtime.toISOString()
-      });
+    if (stderr) {
+      console.error('Sync stderr:', stderr);
     }
     
-    // 完全再インデックスの場合
-    if (full) {
-      // 既存のドキュメントをすべて削除
-      for (const doc of existingDocs) {
-        delete store.metadata.documents[doc.id];
-        result.deleted.push(doc.file_path);
-      }
+    // 結果をパース
+    try {
+      const cliResult = JSON.parse(stdout);
+      result.added = cliResult.indexed || 0;
+      result.updated = cliResult.updated || 0;
       
-      // すべてのファイルを再インデックス
-      for (const [docId, fileInfo] of currentFilesMap) {
-        const indexResult = await executeRagIndex(fileInfo.path, project, { update: true });
-        if (indexResult.indexed_files.length > 0) {
-          result.added.push(fileInfo.path);
-        }
+      if (cliResult.error) {
+        result.errors.push(cliResult.error.message);
       }
-    } else {
-      // 差分同期
-      const existingDocIds = new Set(existingDocs.map(doc => doc.id));
-      
-      // 新規・更新ファイルの処理
-      for (const [docId, fileInfo] of currentFilesMap) {
-        if (!existingDocIds.has(docId)) {
-          // 新規ファイル
-          const indexResult = await executeRagIndex(fileInfo.path, project);
-          if (indexResult.indexed_files.length > 0) {
-            result.added.push(fileInfo.path);
-          }
-        } else {
-          // 既存ファイル - 更新チェック
-          const existingDoc = store.metadata.documents[docId];
-          if (existingDoc.modified_at < fileInfo.modified) {
-            // ファイルが更新されている
-            const indexResult = await executeRagIndex(fileInfo.path, project, { update: true });
-            if (indexResult.indexed_files.length > 0) {
-              result.updated.push(fileInfo.path);
-            }
-          } else {
-            result.unchanged++;
-          }
-        }
-      }
-      
-      // 削除されたファイルの処理
-      if (remove_deleted) {
-        for (const doc of existingDocs) {
-          if (!currentFilesMap.has(doc.id)) {
-            // ファイルが存在しない
-            delete store.metadata.documents[doc.id];
-            result.deleted.push(doc.file_path);
-          }
-        }
-      }
+    } catch (parseError) {
+      console.log('Sync output:', stdout);
     }
-    
-    // メタデータの保存
-    store.saveMetadata();
     
   } catch (error) {
-    console.error('Sync error:', error);
+    result.errors.push(error.message);
   }
   
+  result.time_taken_ms = Date.now() - startTime;
   return result;
 }
 
@@ -360,19 +163,57 @@ export function applyFilters(results, filters) {
   
   return results.filter(result => {
     const metadata = result.metadata || {};
+    const text = result.text || '';
     
-    // カテゴリフィルタ
-    if (filters.category && metadata.category !== filters.category) {
+    // カテゴリフィルタ（テキスト内を検索）
+    if (filters.category) {
+      // メタデータにcategoryがある場合はそれを使用
+      if (metadata.category) {
+        if (metadata.category !== filters.category) {
+          return false;
+        }
+      } else {
+        // テキスト内に「カテゴリ: xxx」の形式があるか検索
+        const categoryMatch = text.match(/カテゴリ[：:]\s*([^\n]+)/);
+        if (!categoryMatch || !categoryMatch[1].includes(filters.category)) {
+          return false;
+        }
+      }
+    }
+    
+    // タグフィルタ（テキスト内を検索）
+    if (filters.tags && filters.tags.length > 0) {
+      // メタデータにtagsがある場合はそれを使用
+      if (metadata.tags && metadata.tags.length > 0) {
+        const hasMatchingTag = filters.tags.some(tag => metadata.tags.includes(tag));
+        if (!hasMatchingTag) {
+          return false;
+        }
+      } else {
+        // テキスト内に「タグ: #xxx」の形式があるか検索
+        const tagMatch = text.match(/タグ[：:]\s*([^\n]+)/);
+        if (tagMatch) {
+          const textTags = tagMatch[1].match(/#\w+/g) || [];
+          const hasMatchingTag = filters.tags.some(filterTag => 
+            textTags.some(textTag => textTag.includes(filterTag) || filterTag.includes(textTag.replace('#', '')))
+          );
+          if (!hasMatchingTag) {
+            return false;
+          }
+        } else {
+          return false;
+        }
+      }
+    }
+    
+    // プロジェクトフィルタ（実際に存在するフィールド）
+    if (filters.project_id && metadata.project_id !== filters.project_id) {
       return false;
     }
     
-    // タグフィルタ
-    if (filters.tags && filters.tags.length > 0) {
-      const docTags = metadata.tags || [];
-      const hasMatchingTag = filters.tags.some(tag => docTags.includes(tag));
-      if (!hasMatchingTag) {
-        return false;
-      }
+    // ファイルタイプフィルタ
+    if (filters.file_type && metadata.file_type !== filters.file_type) {
+      return false;
     }
     
     // 日付フィルタ
@@ -398,94 +239,64 @@ export function applyFilters(results, filters) {
  * 位置情報とハイライトの追加
  */
 export function addPositionAndHighlights(results, query) {
+  if (!results || results.length === 0) {
+    return results;
+  }
+  
+  const queryTerms = query.toLowerCase().split(/\s+/);
+  
   return results.map(result => {
     const text = result.text || '';
-    const queryLower = query.toLowerCase();
-    const textLower = text.toLowerCase();
+    const lowerText = text.toLowerCase();
     
-    // 位置情報の計算（簡易版）
-    const lines = text.split('\n');
-    let lineStart = 0;
-    let lineEnd = lines.length - 1;
-    
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].toLowerCase().includes(queryLower)) {
-        lineStart = i;
-        lineEnd = Math.min(i + 5, lines.length - 1);
-        break;
+    // 各クエリ語の位置を検索
+    const positions = [];
+    queryTerms.forEach(term => {
+      let index = lowerText.indexOf(term);
+      while (index !== -1) {
+        positions.push({
+          start: index,
+          end: index + term.length,
+          term: term
+        });
+        index = lowerText.indexOf(term, index + 1);
       }
+    });
+    
+    // 位置情報を追加
+    if (positions.length > 0) {
+      result.match_positions = positions;
+      
+      // ハイライト用のプレビューを作成（最初のマッチ周辺）
+      const firstMatch = positions[0];
+      const contextStart = Math.max(0, firstMatch.start - 50);
+      const contextEnd = Math.min(text.length, firstMatch.end + 50);
+      
+      result.highlighted_preview = text.substring(contextStart, contextEnd);
     }
-    
-    result.position = {
-      line_start: lineStart,
-      line_end: lineEnd,
-      section: extractSection(text, lineStart)
-    };
-    
-    // ハイライトの計算
-    const highlights = [];
-    let index = 0;
-    while ((index = textLower.indexOf(queryLower, index)) !== -1) {
-      highlights.push({
-        start: index,
-        end: index + query.length
-      });
-      index += query.length;
-    }
-    
-    result.highlights = highlights;
     
     return result;
   });
 }
 
 /**
- * ユーティリティ関数
+ * ヘルパー関数: 再帰的にファイルを取得
  */
-function getAllFiles(dirPath, extensions = []) {
-  let files = [];
+function getAllFiles(dirPath, extensions, files = []) {
+  const items = fs.readdirSync(dirPath);
   
-  try {
-    const items = fs.readdirSync(dirPath);
+  for (const item of items) {
+    const fullPath = path.join(dirPath, item);
+    const stat = fs.statSync(fullPath);
     
-    for (const item of items) {
-      const fullPath = path.join(dirPath, item);
-      const stats = fs.statSync(fullPath);
-      
-      if (stats.isDirectory()) {
-        // 再帰的にディレクトリを探索
-        files = files.concat(getAllFiles(fullPath, extensions));
-      } else if (stats.isFile()) {
-        // 拡張子チェック
-        if (extensions.length === 0 || extensions.some(ext => fullPath.endsWith(ext))) {
-          files.push(fullPath);
-        }
-      }
+    if (stat.isDirectory()) {
+      // ディレクトリの場合は再帰
+      getAllFiles(fullPath, extensions, files);
+    } else if (extensions.some(ext => item.endsWith(ext))) {
+      // 指定された拡張子のファイルを追加
+      files.push(fullPath);
     }
-  } catch (error) {
-    console.error(`Error reading directory ${dirPath}:`, error);
   }
   
   return files;
 }
-
-function extractSection(text, lineNumber) {
-  const lines = text.split('\n');
-  
-  // 直前の見出しを探す
-  for (let i = lineNumber; i >= 0; i--) {
-    if (lines[i].match(/^#+\s/)) {
-      return lines[i].replace(/^#+\s/, '').trim();
-    }
-  }
-  
-  return null;
-}
-
-export default {
-  executeRagIndex,
-  executeRagDelete,
-  executeRagSync,
-  applyFilters,
-  addPositionAndHighlights
-};

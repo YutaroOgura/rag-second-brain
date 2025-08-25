@@ -35,7 +35,45 @@
 }
 ```
 
-## 重要：トラブルシューティング
+## 重要：本番環境への適用方法
+
+### 🚀 ソース修正後の本番環境適用手順
+
+**ソースコードを修正した後は、必ず以下の手順で本番環境（~/.rag）に適用してください：**
+
+```bash
+# 1. プロジェクトディレクトリで作業
+cd /home/ogura/work/ultra/rag-second-brain
+
+# 2. setup.shを使用して本番環境を更新
+./setup.sh
+
+# これにより以下が自動的に実行されます：
+# - ragパッケージのコピー
+# - Pythonモジュール（src/*.py）のコピー
+# - MCPサーバー（mcp-server.js）のコピー
+# - 必要な依存関係の更新
+```
+
+### 📝 重要な変更を行った場合
+
+以下のファイルを変更した場合は、特に注意して本番適用を行ってください：
+
+1. **Pythonコード変更時**:
+   - `rag/core/*.py` - コアモジュール
+   - `src/*.py` - 追加モジュール
+   - → `./setup.sh`を実行
+
+2. **MCPサーバー変更時**:
+   - `mcp-server.js` - MCPサーバー本体
+   - `mcp-tools-implementation.js` - ツール実装
+   - → `./setup.sh`を実行
+
+3. **設定変更時**:
+   - `config.yaml` - 設定ファイル
+   - → 手動で`~/.rag/config.yaml`を編集
+
+## トラブルシューティング
 
 ### 🔥 MCP検索が失敗する場合の復旧手順
 
@@ -54,11 +92,7 @@ bash setup.sh
 # 3. データベース復元
 cp -r ~/.rag_backup_*/chroma ~/.rag/
 
-# 4. MCPサーバー更新
-cp mcp-server.js ~/.rag/
-cp mcp-tools-implementation.js ~/.rag/
-
-# 5. コレクション復元（必要な場合）
+# 4. コレクション復元（必要な場合）
 /home/ogura/.rag/venv/bin/python -c "
 import chromadb
 client = chromadb.PersistentClient(path='/home/ogura/.rag/chroma')
@@ -69,7 +103,7 @@ print(f'Collection restored: {collection.count()} documents')
 
 ### ⚠️ 同期時の注意事項
 - **絶対に使用しないコマンド**: `rsync --delete` （既存ファイルを削除してしまう）
-- **推奨**: 個別ファイルのコピー `cp file1 file2`
+- **推奨**: `./setup.sh`を使用（安全で確実）
 
 ## トークン節約ガイドライン
 

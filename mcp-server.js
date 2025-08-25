@@ -30,9 +30,95 @@ import {
 
 const execAsync = promisify(exec);
 
-// RAGコマンドのパス設定
+// RAGコマンドのパス設定（先に定義）
 const RAG_HOME = process.env.RAG_HOME || path.join(os.homedir(), '.rag');
 const RAG_CMD = path.join(RAG_HOME, 'venv', 'bin', 'rag');
+
+// PIDファイルのパス
+const PID_FILE = path.join(RAG_HOME, 'mcp-server.pid');
+
+// 起動時に古いプロセスを終了
+async function killOldProcesses() {
+  try {
+    // 現在のプロセスIDを取得
+    const currentPid = process.pid;
+    
+    // PIDファイルから前回のプロセスIDを読み取る
+    if (fs.existsSync(PID_FILE)) {
+      try {
+        const oldPid = fs.readFileSync(PID_FILE, 'utf8').trim();
+        if (oldPid && oldPid !== String(currentPid)) {
+          // プロセスが存在するか確認
+          try {
+            await execAsync(`ps -p ${oldPid}`);
+            // プロセスが存在する場合は終了
+            await execAsync(`kill ${oldPid}`);
+            console.error(`✅ 古いMCPプロセス (PID: ${oldPid}) を終了しました`);
+          } catch (e) {
+            // プロセスが存在しない場合は何もしない
+          }
+        }
+      } catch (e) {
+        console.error('PIDファイルの読み取りエラー:', e.message);
+      }
+    }
+    
+    // 追加の安全対策：同じmcp-server.jsを実行している他のプロセスも検索
+    const { stdout } = await execAsync(
+      `ps aux | grep "rag-second-brain/mcp-server.js" | grep -v grep | awk '{print $2}'`
+    );
+    
+    const pids = stdout.trim().split('\n').filter(pid => pid && pid !== String(currentPid));
+    
+    if (pids.length > 0) {
+      console.error(`🔄 残っている古いMCPプロセスを終了中: ${pids.join(', ')}`);
+      for (const pid of pids) {
+        try {
+          await execAsync(`kill ${pid}`);
+          console.error(`  ✅ PID ${pid} を終了しました`);
+        } catch (e) {
+          // プロセスが既に終了している場合はエラーを無視
+        }
+      }
+    }
+    
+    // 現在のPIDをファイルに保存
+    fs.writeFileSync(PID_FILE, String(currentPid));
+    console.error(`📝 現在のPID (${currentPid}) を保存しました`);
+    
+  } catch (error) {
+    // エラーが発生しても処理を継続
+    console.error('古いプロセスの終了中にエラー:', error.message);
+  }
+}
+
+// 起動時に古いプロセスを終了
+await killOldProcesses();
+
+// プロセス終了時のクリーンアップ
+process.on('exit', () => {
+  try {
+    if (fs.existsSync(PID_FILE)) {
+      const savedPid = fs.readFileSync(PID_FILE, 'utf8').trim();
+      if (savedPid === String(process.pid)) {
+        fs.unlinkSync(PID_FILE);
+        console.error('📝 PIDファイルを削除しました');
+      }
+    }
+  } catch (e) {
+    // エラーを無視
+  }
+});
+
+process.on('SIGINT', () => {
+  console.error('🛑 MCPサーバーを終了中...');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.error('🛑 MCPサーバーを終了中...');
+  process.exit(0);
+});
 
 // Phase 1 フォールバック機能のパス
 const ULTRA_RAG_PATH = '/home/ogura/work/ultra/rag-second-brain';
@@ -362,10 +448,43 @@ async function executeRagSearch(query, searchType, topK, projectId) {
     }
     
     if (jsonResult && jsonResult.results) {
+      // トークン制限対策: 各結果のテキストを80文字に制限
+      const truncatedResults = jsonResult.results.map(result => {
+        const truncatedResult = { ...result };
+        
+        // textフィールドを80文字に制限
+        if (truncatedResult.text && truncatedResult.text.length > 80) {
+          truncatedResult.text = truncatedResult.text.substring(0, 80) + '...';
+        }
+        
+        // documentフィールドも80文字に制限
+        if (truncatedResult.document && truncatedResult.document.length > 80) {
+          truncatedResult.document = truncatedResult.document.substring(0, 80) + '...';
+        }
+        
+        // metadataの不要なフィールドを削除
+        if (truncatedResult.metadata) {
+          const minimalMetadata = {
+            file_path: truncatedResult.metadata.file_path,
+            project_id: truncatedResult.metadata.project_id
+          };
+          // カテゴリとタグは残す（フィルタリング用）
+          if (truncatedResult.metadata.category) {
+            minimalMetadata.category = truncatedResult.metadata.category;
+          }
+          if (truncatedResult.metadata.tags) {
+            minimalMetadata.tags = truncatedResult.metadata.tags;
+          }
+          truncatedResult.metadata = minimalMetadata;
+        }
+        
+        return truncatedResult;
+      });
+      
       return {
         success: true,
-        count: jsonResult.results.length,
-        data: jsonResult,
+        count: truncatedResults.length,
+        data: { ...jsonResult, results: truncatedResults },
         error: null
       };
     } else {
@@ -409,29 +528,13 @@ function formatFallbackResult(results, searchHistory, originalQuery) {
   for (const result of results) {
     if (result.result.data && result.result.data.results) {
       for (const item of result.result.data.results) {
-        // テキストフィールドを切り詰め（改善案1: 200文字→80文字）
+        // すでにexecuteRagSearchで80文字に制限済みなので、追加の処理は不要
         const trimmedItem = {
           ...item,
           search_method: result.method,
-          search_query: result.query,
+          search_query: result.query.substring(0, 30),  // 検索クエリも30文字に制限
           weighted_score: (item.score || 0.5) * result.weight
         };
-        
-        // textフィールドがある場合は80文字に切り詰め
-        if (trimmedItem.text && trimmedItem.text.length > 80) {
-          trimmedItem.text = trimmedItem.text.substring(0, 80) + '...';
-        }
-        
-        // metadataの大きなフィールドも削除
-        if (trimmedItem.metadata) {
-          const minimalMetadata = {
-            file_name: trimmedItem.metadata.file_name,
-            file_path: trimmedItem.metadata.file_path,
-            project_id: trimmedItem.metadata.project_id,
-            title: trimmedItem.metadata.title
-          };
-          trimmedItem.metadata = minimalMetadata;
-        }
         
         allResults.push(trimmedItem);
       }
@@ -640,17 +743,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         } else {
           // 通常の検索を実行
-          const cmd = `${RAG_CMD} search "${query}" --type ${search_type} --top-k ${top_k} --format json${project_id ? ` --project ${project_id}` : ''}`;
-          console.error(`Executing: ${cmd}`);
+          const searchResult = await executeRagSearch(query, search_type, top_k, project_id);
           
-          const { stdout, stderr } = await execAsync(cmd, {
-            env: { ...process.env, PYTHONPATH: path.join(RAG_HOME, 'src') }
-          });
+          // 結果をフォーマット（トークン制限対策済み）
+          const formattedResult = {
+            success: searchResult.success,
+            query: query.substring(0, 50),  // クエリも50文字に制限
+            search_type: search_type,
+            count: searchResult.count,
+            results: searchResult.data ? searchResult.data.results : []
+          };
+          
+          // フィルタリング適用
+          if (filters && Object.keys(filters).length > 0 && formattedResult.results) {
+            formattedResult.results = applyFilters(formattedResult.results, filters);
+            formattedResult.count = formattedResult.results.length;
+          }
           
           return {
             content: [{
               type: "text",
-              text: stdout
+              text: JSON.stringify(formattedResult, null, 2)
             }]
           };
         }

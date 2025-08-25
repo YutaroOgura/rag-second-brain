@@ -1,0 +1,8 @@
+Requirement already satisfied: pytest in /home/ogura/.rag/venv/lib/python3.12/site-packages (8.4.1)
+Requirement already satisfied: pytest-asyncio in /home/ogura/.rag/venv/lib/python3.12/site-packages (1.1.0)
+Requirement already satisfied: pytest-cov in /home/ogura/.rag/venv/lib/python3.12/site-packages (6.2.1)
+Requirement already satisfied: iniconfig>=1 in /home/ogura/.rag/venv/lib/python3.12/site-packages (from pytest) (2.1.0)
+Requirement already satisfied: packaging>=20 in /home/ogura/.rag/venv/lib/python3.12/site-packages (from pytest) (25.0)
+Requirement already satisfied: pluggy<2,>=1.5 in /home/ogura/.rag/venv/lib/python3.12/site-packages (from pytest) (1.6.0)
+Requirement already satisfied: pygments>=2.7.2 in /home/ogura/.rag/venv/lib/python3.12/site-packages (from pytest) (2.19.2)
+Requirement already satisfied: coverage>=7.5 in /home/ogura/.rag/venv/lib/python3.12/site-packages (from coverage[toml]>=7.5->pytest-cov) (7.10.5)
