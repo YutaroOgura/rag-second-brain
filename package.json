@@ -22,5 +22,17 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YutaroOgura/rag-second-brain.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YutaroOgura/rag-second-brain/issues"
+  },
+  "homepage": "https://github.com/YutaroOgura/rag-second-brain#readme"
 }

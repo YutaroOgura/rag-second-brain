@@ -73,4 +73,4 @@ docs/.doctrees/
 # mypy
 .mypy_cache/
 .dmypy.json
-dmypy.json
+dmypy.jsonnode_modules/

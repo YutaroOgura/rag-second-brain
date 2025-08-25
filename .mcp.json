@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "rag-second-brain": {
+            "command": "node",
+            "args": ["/home/ogura/work/ultra/rag-second-brain/mcp-server.js"],
+            "env": {
+                "RAG_HOME": "/home/ogura/.rag"
+            }
+        }
+    }
+}
+  

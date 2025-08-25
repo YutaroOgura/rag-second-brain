@@ -20,6 +20,13 @@ import { promisify } from 'util';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import {
+  executeRagIndex,
+  executeRagDelete,
+  executeRagSync,
+  applyFilters,
+  addPositionAndHighlights
+} from './mcp-tools-implementation.js';
 
 const execAsync = promisify(exec);
 
@@ -183,6 +190,123 @@ async function executeWithFallback(query, searchType = 'hybrid', topK = 5, proje
 }
 
 /**
+ * Grep検索実行（改善案2: ハイブリッド検索用）
+ */
+async function executeGrepSearch(query, projectPath) {
+  try {
+    // プロジェクトのルートパスを決定
+    const searchPath = projectPath || '/home/ogura/work/ultra';
+    
+    // grepコマンドを構築（大文字小文字を無視）
+    const cmd = `grep -r -i "${query}" "${searchPath}" --include="*.md" --include="*.txt" --include="*.py" --include="*.js" --include="*.php" 2>/dev/null | head -20`;
+    
+    const { stdout, stderr } = await execAsync(cmd, {
+      timeout: 10000 // 10秒タイムアウト
+    });
+    
+    if (!stdout || stdout.trim() === '') {
+      return {
+        success: false,
+        results: [],
+        error: 'No grep results found'
+      };
+    }
+    
+    // grep結果をパース
+    const lines = stdout.trim().split('\n').slice(0, 10); // 最大10行
+    const results = lines.map((line, index) => {
+      const colonIndex = line.indexOf(':');
+      const filePath = colonIndex > 0 ? line.substring(0, colonIndex) : '';
+      const content = colonIndex > 0 ? line.substring(colonIndex + 1).trim() : line;
+      
+      return {
+        file_path: filePath,
+        text: content.substring(0, 80) + (content.length > 80 ? '...' : ''), // 80文字に制限
+        score: 0.8 - (index * 0.05), // 順位に基づくスコア
+        source: 'grep'
+      };
+    });
+    
+    return {
+      success: true,
+      results: results,
+      count: results.length
+    };
+  } catch (error) {
+    console.error(`Grep search error: ${error.message}`);
+    return {
+      success: false,
+      results: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * ハイブリッド検索実行（改善案2: Grep + Vector検索）
+ */
+async function executeHybridSearchWithGrep(query, topK, projectId) {
+  const results = [];
+  
+  console.error(`🔍 ハイブリッド検索開始: Grep + Vector for "${query}"`);
+  
+  // 1. Grep検索を実行
+  const grepResult = await executeGrepSearch(query);
+  if (grepResult.success && grepResult.results.length > 0) {
+    console.error(`✅ Grep検索: ${grepResult.results.length}件`);
+    results.push({
+      method: 'grep',
+      results: grepResult.results,
+      weight: 0.4 // Grepの重み
+    });
+  }
+  
+  // 2. Vector検索を実行
+  const vectorResult = await executeRagSearch(query, 'vector', topK, projectId);
+  if (vectorResult.success && vectorResult.data && vectorResult.data.results) {
+    console.error(`✅ Vector検索: ${vectorResult.data.results.length}件`);
+    results.push({
+      method: 'vector',
+      results: vectorResult.data.results,
+      weight: 0.6 // Vectorの重み
+    });
+  }
+  
+  // 結果をマージしてフォーマット
+  const mergedResults = [];
+  const seenFiles = new Set();
+  
+  // 両方の結果を統合
+  for (const searchResult of results) {
+    for (const item of searchResult.results) {
+      const fileKey = item.file_path || item.metadata?.file_path || '';
+      
+      // 重複を避ける
+      if (fileKey && seenFiles.has(fileKey)) {
+        continue;
+      }
+      if (fileKey) seenFiles.add(fileKey);
+      
+      mergedResults.push({
+        ...item,
+        search_method: searchResult.method,
+        combined_score: (item.score || 0.5) * searchResult.weight
+      });
+    }
+  }
+  
+  // スコアでソート
+  mergedResults.sort((a, b) => b.combined_score - a.combined_score);
+  
+  return {
+    query: query,
+    search_type: 'hybrid_grep_vector',
+    total_found: mergedResults.length,
+    results: mergedResults.slice(0, topK)
+  };
+}
+
+/**
  * RAG検索実行（単一クエリ）
  */
 async function executeRagSearch(query, searchType, topK, projectId) {
@@ -193,22 +317,46 @@ async function executeRagSearch(query, searchType, topK, projectId) {
     cmd += ` --top-k ${topK}`;
     cmd += ` --format json`;
     
+    // デバッグログ追加
+    console.error(`[DEBUG] Executing command: ${cmd}`);
+    console.error(`[DEBUG] RAG_CMD: ${RAG_CMD}`);
+    console.error(`[DEBUG] RAG_HOME: ${RAG_HOME}`);
+    console.error(`[DEBUG] Working directory: ${process.cwd()}`);
+    
     const { stdout, stderr } = await execAsync(cmd, {
-      env: { ...process.env, PYTHONPATH: path.join(RAG_HOME, 'src') },
+      env: { 
+        ...process.env, 
+        PYTHONPATH: path.join(RAG_HOME, 'src'),
+        RAG_HOME: RAG_HOME,
+        HOME: os.homedir()
+      },
+      cwd: RAG_HOME,  // 作業ディレクトリを明示的に設定
       timeout: 30000 // 30秒タイムアウト
     });
     
-    // JSON結果をパース
+    // デバッグ: 標準エラー出力
+    if (stderr) {
+      console.error(`[DEBUG] stderr: ${stderr}`);
+    }
+    
+    // デバッグ: 標準出力の最初の500文字
+    console.error(`[DEBUG] stdout (first 500 chars): ${stdout.substring(0, 500)}`);
+    
+    // JSON結果をパース - 最後の{で始まる行を探す（それがJSON出力）
     const lines = stdout.trim().split('\n');
     let jsonResult = null;
     
-    for (const line of lines) {
-      if (line.startsWith('{')) {
+    // 後ろから探して最初のJSONを見つける
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (line.trim().startsWith('{')) {
         try {
           jsonResult = JSON.parse(line);
+          console.error(`[DEBUG] JSON parsed successfully: ${jsonResult.results ? jsonResult.results.length : 0} results`);
           break;
         } catch (e) {
-          continue;
+          console.error(`[DEBUG] JSON parse error on line ${i}: ${e.message}`);
+          console.error(`[DEBUG] Attempted to parse: ${line.substring(0, 100)}...`);
         }
       }
     }
@@ -233,6 +381,8 @@ async function executeRagSearch(query, searchType, topK, projectId) {
       };
     }
   } catch (error) {
+    console.error(`[DEBUG] executeRagSearch error: ${error.message}`);
+    console.error(`[DEBUG] error stack: ${error.stack}`);
     return {
       success: false,
       count: 0,
@@ -259,12 +409,31 @@ function formatFallbackResult(results, searchHistory, originalQuery) {
   for (const result of results) {
     if (result.result.data && result.result.data.results) {
       for (const item of result.result.data.results) {
-        allResults.push({
+        // テキストフィールドを切り詰め（改善案1: 200文字→80文字）
+        const trimmedItem = {
           ...item,
           search_method: result.method,
           search_query: result.query,
           weighted_score: (item.score || 0.5) * result.weight
-        });
+        };
+        
+        // textフィールドがある場合は80文字に切り詰め
+        if (trimmedItem.text && trimmedItem.text.length > 80) {
+          trimmedItem.text = trimmedItem.text.substring(0, 80) + '...';
+        }
+        
+        // metadataの大きなフィールドも削除
+        if (trimmedItem.metadata) {
+          const minimalMetadata = {
+            file_name: trimmedItem.metadata.file_name,
+            file_path: trimmedItem.metadata.file_path,
+            project_id: trimmedItem.metadata.project_id,
+            title: trimmedItem.metadata.title
+          };
+          trimmedItem.metadata = minimalMetadata;
+        }
+        
+        allResults.push(trimmedItem);
       }
     }
   }
@@ -308,9 +477,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           search_type: {
             type: "string",
-            enum: ["vector", "keyword", "hybrid"],
+            enum: ["vector", "keyword", "hybrid", "hybrid_grep"],
             default: "hybrid",
-            description: "検索タイプ"
+            description: "検索タイプ（hybrid_grep: Grep+Vector検索）"
           },
           top_k: {
             type: "number",
@@ -321,6 +490,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "boolean",
             default: true,
             description: "フォールバック機能を使用"
+          },
+          filters: {
+            type: "object",
+            description: "検索結果のフィルタ条件",
+            properties: {
+              category: { type: "string", description: "カテゴリでフィルタ" },
+              tags: { type: "array", items: { type: "string" }, description: "タグでフィルタ" },
+              created_after: { type: "string", description: "作成日時の開始" },
+              created_before: { type: "string", description: "作成日時の終了" }
+            }
           }
         },
         required: ["query"]
@@ -335,9 +514,45 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           path: { type: "string", description: "インデックス対象のパス" },
           project_id: { type: "string", description: "プロジェクトID" },
-          recursive: { type: "boolean", default: false, description: "再帰的にインデックス" }
+          recursive: { type: "boolean", default: false, description: "再帰的にインデックス" },
+          metadata: { type: "object", description: "追加メタデータ" },
+          update: { type: "boolean", default: false, description: "既存ドキュメントを更新" }
         },
         required: ["path", "project_id"]
+      }
+    },
+    {
+      name: "rag_delete",
+      description: "ドキュメントを削除",
+      inputSchema: {
+        type: "object",
+        properties: {
+          document_id: { type: "string", description: "削除するドキュメントID" },
+          project: { type: "string", description: "削除するプロジェクトID" },
+          filters: {
+            type: "object",
+            description: "削除条件",
+            properties: {
+              older_than: { type: "string", description: "指定日数より古い" },
+              category: { type: "string", description: "カテゴリ" },
+              source_type: { type: "string", description: "ソースタイプ" }
+            }
+          }
+        }
+      }
+    },
+    {
+      name: "rag_sync",
+      description: "プロジェクトのドキュメントを同期",
+      inputSchema: {
+        type: "object",
+        properties: {
+          project: { type: "string", description: "プロジェクトID" },
+          path: { type: "string", description: "同期対象のパス" },
+          full: { type: "boolean", default: false, description: "完全再インデックス" },
+          remove_deleted: { type: "boolean", default: true, description: "削除ファイルを反映" }
+        },
+        required: ["project", "path"]
       }
     },
     {
@@ -376,11 +591,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case "rag_search": {
-        const { query, project_id, search_type = "hybrid", top_k = 5, use_fallback = true } = args;
+        const { query, project_id, search_type = "hybrid", top_k = 5, use_fallback = true, filters } = args;
+        
+        // 改善案2: hybrid_grepタイプの処理
+        if (search_type === "hybrid_grep") {
+          console.error(`🔀 ハイブリッド検索（Grep + Vector）を実行`);
+          const result = await executeHybridSearchWithGrep(query, top_k, project_id);
+          
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+            }]
+          };
+        }
         
         if (use_fallback) {
           // Phase 1 フォールバック検索を実行
-          const result = await executeWithFallback(query, search_type, top_k, project_id);
+          let result = await executeWithFallback(query, search_type, top_k, project_id);
+          
+          // デバッグログ
+          console.error(`[DEBUG] executeWithFallback result count:`, result.results ? result.results.length : 0);
+          
+          try {
+            // フィルタリング適用
+            if (filters && Object.keys(filters).length > 0 && result.results) {
+              const { applyFilters } = await import('./mcp-tools-implementation.js');
+              result.results = applyFilters(result.results, filters);
+              console.error(`[DEBUG] After filtering: ${result.results.length} results`);
+            }
+            
+            // 位置情報とハイライトの追加
+            if (result.results && result.results.length > 0) {
+              const { addPositionAndHighlights } = await import('./mcp-tools-implementation.js');
+              result.results = addPositionAndHighlights(result.results, query);
+              console.error(`[DEBUG] After highlights: ${result.results.length} results`);
+            }
+          } catch (error) {
+            console.error(`[ERROR] Filter/Highlight processing failed:`, error.message);
+            // エラーが発生してもオリジナルの結果を返す
+          }
           
           return {
             content: [{
@@ -406,24 +656,96 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       }
       
-      // 他のツールの処理は元のMCPサーバーと同じ
+      // rag_index Tool - ドキュメントのインデックス作成
       case "rag_index": {
-        const { path: indexPath, project_id, recursive = false } = args;
-        let cmd = `${RAG_CMD} index "${indexPath}" --project ${project_id}`;
-        if (recursive) cmd += ` --recursive`;
+        const { path: indexPath, project_id, recursive = false, metadata, update } = args;
         
-        console.error(`Executing: ${cmd}`);
-        const { stdout } = await execAsync(cmd);
+        if (!indexPath || !project_id) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: "Missing required parameters: path and project_id"
+              })
+            }]
+          };
+        }
+        
+        const result = await executeRagIndex(indexPath, project_id, {
+          recursive,
+          metadata,
+          update
+        });
         
         return {
-          content: [{ type: "text", text: stdout }]
+          content: [{
+            type: "text",
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+      
+      // rag_delete Tool - ドキュメントの削除
+      case "rag_delete": {
+        const { document_id, project, filters } = args;
+        
+        if (!document_id && !project && !filters) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: "At least one parameter required: document_id, project, or filters"
+              })
+            }]
+          };
+        }
+        
+        const result = await executeRagDelete({
+          document_id,
+          project,
+          filters
+        });
+        
+        return {
+          content: [{
+              type: "text",
+              text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+      
+      // rag_sync Tool - プロジェクトの同期
+      case "rag_sync": {
+        const { project, path: syncPath, full = false, remove_deleted = true } = args;
+        
+        if (!project || !syncPath) {
+          return {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                error: "Missing required parameters: project and path"
+              })
+            }]
+          };
+        }
+        
+        const result = await executeRagSync(project, syncPath, {
+          full,
+          remove_deleted
+        });
+        
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify(result, null, 2)
+          }]
         };
       }
       
       case "rag_stats": {
         const { project_id } = args;
+        // statsコマンドは現在project_idパラメータをサポートしていない
         let cmd = `${RAG_CMD} stats`;
-        if (project_id) cmd += ` --project ${project_id}`;
         
         const { stdout } = await execAsync(cmd);
         return {
